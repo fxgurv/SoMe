@@ -25,7 +25,7 @@
   "user_data": "C:\\Users\\${user}\\AppData\\Local\\Google\\Chrome\\User Data",
   "font": "bold_font.ttf",
   "imagemagick_path": "/usr/bin/convert",
-  "tts_type": "elevenlabs",
+  "tts_engine": "elevenlabs",
   "elevenlabs_api_key": "ec71cc5fb466bbbeaa935e5a7b001d25",
-  "elevenlabs_voice": "Rachel"
+  "tts_voice": "Rachel"
 }
