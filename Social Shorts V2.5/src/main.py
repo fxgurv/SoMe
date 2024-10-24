@@ -7,15 +7,16 @@ from config import *
 from status import *
 from uuid import uuid4
 from constants import *
-from classes.Tts import TTS
+from Tts import TTS
 from termcolor import colored
-from classes.Twitter import Twitter
-from classes.YouTube import YouTube
+from Twitter import Twitter
+from YouTube import YouTube
 from prettytable import PrettyTable
-from classes.Outreach import Outreach
-from classes.AFM import AffiliateMarketing
+from Outreach import Outreach
+from AFM import AffiliateMarketing
 from save_short import save_short
 from uploader import upload_youtube_using_selenium
+
 
 def main():
 
