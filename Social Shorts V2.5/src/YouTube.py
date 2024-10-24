@@ -8,7 +8,7 @@ import math
 import requests
 from utils import *
 from cache import *
-from .Tts import TTS
+from Tts import TTS
 from config import *
 from status import *
 from PIL import Image
@@ -22,10 +22,10 @@ from datetime import datetime
 from termcolor import colored
 fetcher_img = BingImagesFetcher()
 from save_short import save_image
-from .GeneratorImg import Generation
+from GeneratorImg import Generation
 from moviepy.video.fx.all import crop
 from moviepy.config import change_settings
-from .BingImagesFetcher import BingImagesFetcher
+from BingImagesFetcher import BingImagesFetcher
 from moviepy.video.tools.subtitles import SubtitlesClip
 
 
