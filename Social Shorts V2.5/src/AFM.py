@@ -3,7 +3,7 @@ import g4f
 from status import *
 from config import *
 from constants import *
-from .Twitter import Twitter
+from Twitter import Twitter
 from selenium_firefox import *
 from selenium import webdriver
 from selenium.webdriver.common.by import By
