@@ -5,128 +5,35 @@ import warnings
 from typing import Optional
 from contextlib import redirect_stdout, redirect_stderr
 import requests
+from termcolor import colored
+import asyncio
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class TTS:
-    def __init__(self) -> None:
-        info("Initializing TTS class")
-        self.tts_engine = get_tts_engine()
-        self.tts_voice = get_tts_voice()
-        self.elevenlabs_api_key = get_elevenlabs_api_key() if self.tts_engine == 'elevenlabs' else None
-        self.openai_api_key = get_openai_api_key() if self.tts_engine == 'openai' else None
-        info(f"TTS Engine: {self.tts_engine}, Voice: {self.tts_voice}")
+    def __init__(self):
+        self.openai_api_key = os.getenv('OPENAI_API_KEY')
+        self.elevenlabs_api_key = os.getenv('ELEVENLABS_API_KEY')
+        self.local_ai_url = os.getenv('LOCAL_AI_URL', 'https://imseldrith-tts-openai-free.hf.space/v1/audio/speech')
+        self.tts_voice = "alloy"  # Default voice
 
-        if self.tts_engine == 'coqui':
-            self._init_coqui_tts()
-        elif self.tts_engine == 'edge':
-            self._init_edge_tts()
+    def google_tts(self, text, output_file="google_tts_output.mp3"):
+        from gtts import gTTS
+        tts = gTTS(text=text, lang='en', slow=False)
+        tts.save(output_file)
+        return output_file
 
-    def _init_coqui_tts(self):
-        from TTS.utils.manage import ModelManager
-        from TTS.utils.synthesizer import Synthesizer
-
-        site_packages = next((p for p in sys.path if 'site-packages' in p), None)
-        if not site_packages:
-            raise EnvironmentError("Could not find site-packages directory. Ensure that the TTS package is installed.")
-
-        models_json_path = os.path.join(site_packages, "TTS", ".models.json")
-        self._model_manager = ModelManager(models_json_path)
-
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", category=FutureWarning)
-            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                self._model_path, self._config_path, self._model_item = \
-                    self._model_manager.download_model("tts_models/en/ljspeech/tacotron2-DDC_ph")
-
-                voc_path, voc_config_path, _ = self._model_manager. \
-                    download_model("vocoder_models/en/ljspeech/univnet")
-                
-                self._synthesizer = Synthesizer(
-                    tts_checkpoint=self._model_path,
-                    tts_config_path=self._config_path,
-                    vocoder_checkpoint=voc_path,
-                    vocoder_config=voc_config_path
-                )
-
-    def _init_edge_tts(self):
+    async def edge_tts(self, text, output_file="edge_tts_output.mp3"):
         import edge_tts
-        self.edge_tts = edge_tts
+        communicate = edge_tts.Communicate(text, "en-US-ChristopherNeural")
+        await communicate.save(output_file)
+        return output_file
 
-    def synthesize(self, text: str, output_file: str = os.path.join(ROOT_DIR, "tmp", "audio.wav")) -> str:
-        info(f"Synthesizing text using {self.tts_engine}")
-        if self.tts_engine == 'elevenlabs':
-            return self._synthesize_elevenlabs(text, output_file)
-        elif self.tts_engine == 'openai':
-            return self._synthesize_openai(text, output_file)
-        elif self.tts_engine == 'gtts':
-            return self._synthesize_gtts(text, output_file)
-        elif self.tts_engine == 'coqui':
-            return self._synthesize_coqui(text, output_file)
-        elif self.tts_engine == 'edge':
-            return self._synthesize_edge(text, output_file)
-        elif self.tts_engine == 'local_openai':
-            return self._synthesize_local_openai(text, output_file)
-        else:
-            error(f"Unsupported TTS engine: {self.tts_engine}")
-            raise ValueError(f"Unsupported TTS engine: {self.tts_engine}")
-
-    def _synthesize_elevenlabs(self, text: str, output_file: str) -> str:
-        info("Synthesizing text using ElevenLabs")
-        
-        if not self.elevenlabs_api_key:
-            raise ValueError("ElevenLabs API key is not set")
-
-        voices_url = "https://api.elevenlabs.io/v1/voices"
-        headers = {
-            "xi-api-key": self.elevenlabs_api_key
-        }
-
-        try:
-            voices_response = requests.get(voices_url, headers=headers)
-            voices_response.raise_for_status()
-            voices = voices_response.json().get("voices", [])
-            
-            voice_id = next((voice["voice_id"] for voice in voices if voice["name"].lower() == self.tts_voice.lower()), None)
-            
-            if not voice_id:
-                raise ValueError(f"Voice '{self.tts_voice}' not found")
-
-            url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
-            headers.update({
-                "Content-Type": "application/json",
-                "Accept": "audio/mpeg"
-            })
-            data = {
-                "text": text,
-                "model_id": "eleven_monolingual_v1",
-                "voice_settings": {
-                    "stability": 0.5,
-                    "similarity_boost": 0.5
-                }
-            }
-
-            response = requests.post(url, json=data, headers=headers)
-            response.raise_for_status()
-
-            with open(output_file, "wb") as f:
-                f.write(response.content)
-
-            success(f"Audio synthesized successfully and saved to {output_file}")
-            return output_file
-        except requests.exceptions.HTTPError as http_err:
-            error(f"HTTP error occurred: {http_err}")
-            if response.status_code == 401:
-                error("ElevenLabs API error: Unauthorized. Please check your API key.")
-            elif response.status_code == 400:
-                error_message = response.json().get('detail', {}).get('message', 'Unknown error')
-                error(f"ElevenLabs API error: {error_message}")
-            raise
-        except Exception as err:
-            error(f"An error occurred: {err}")
-            raise
-
-    def _synthesize_openai(self, text: str, output_file: str) -> str:
-        info("Synthesizing text using OpenAI")
-        url = "https://api.openai.com/v1/audio/speech"
+    def openai_tts(self, text, output_file="openai_tts_output.mp3"):
+        import requests
         headers = {
             "Authorization": f"Bearer {self.openai_api_key}",
             "Content-Type": "application/json"
@@ -134,71 +41,21 @@ class TTS:
         data = {
             "model": "tts-1",
             "input": text,
-            "voice": self.tts_voice
+            "voice": "alloy"
         }
-
-        try:
-            response = requests.post(url, json=data, headers=headers)
-            response.raise_for_status()
-
-            with open(output_file, "wb") as f:
+        response = requests.post(
+            "https://api.openai.com/v1/audio/speech",
+            headers=headers,
+            json=data
+        )
+        if response.status_code == 200:
+            with open(output_file, 'wb') as f:
                 f.write(response.content)
-
-            success(f"Audio synthesized successfully and saved to {output_file}")
             return output_file
-        except requests.exceptions.HTTPError as http_err:
-            error(f"HTTP error occurred: {http_err}")
-            if response.status_code == 400:
-                error_message = response.json().get('error', {}).get('message', 'Unknown error')
-                error(f"OpenAI API error: {error_message}")
-            raise
-        except Exception as err:
-            error(f"An error occurred: {err}")
-            raise
+        return None
 
-    def _synthesize_gtts(self, text: str, output_file: str) -> str:
-         from gtts import gTTS
-        info("Synthesizing text using gTTS")
-        try:
-            tts = gTTS(text=text, lang='en', slow=False)
-            tts.save(output_file)
-            success(f"Audio synthesized successfully and saved to {output_file}")
-            return output_file
-        except Exception as err:
-            error(f"An error occurred with gTTS: {err}")
-            raise
-
-    def _synthesize_coqui(self, text: str, output_file: str) -> str:
-        info("Synthesizing text using Coqui TTS")
-        try:
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", category=FutureWarning)
-                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                    outputs = self._synthesizer.tts(text)
-                    self._synthesizer.save_wav(outputs, output_file)
-            success(f"Audio synthesized successfully and saved to {output_file}")
-            return output_file
-        except Exception as err:
-            error(f"An error occurred with Coqui TTS: {err}")
-            raise
-
-    def _synthesize_edge(self, text: str, output_file: str) -> str:
-        info("Synthesizing text using Edge TTS")
-        try:
-            communicate = self.edge_tts.Communicate(text, self.tts_voice)
-            async def _main():
-                await communicate.save(output_file)
-            import asyncio
-            asyncio.run(_main())
-            success(f"Audio synthesized successfully and saved to {output_file}")
-            return output_file
-        except Exception as err:
-            error(f"An error occurred with Edge TTS: {err}")
-            raise
-
-    def _synthesize_local_openai(self, text: str, output_file: str) -> str:
-        info("Synthesizing text using Local OpenAI TTS")
-        url = "https://imseldrith-tts-openai-free.hf.space/v1/audio/speech"
+    def local_ai_tts(self, text, output_file="local_ai_tts_output.mp3"):
+        logger.info("Synthesizing text using Local AI TTS")
         headers = {
             "accept": "*/*",
             "Content-Type": "application/json"
@@ -210,21 +67,130 @@ class TTS:
             "response_format": "mp3",
             "speed": 1
         }
-
         try:
-            response = requests.post(url, json=data, headers=headers)
+            response = requests.post(
+                f"{self.local_ai_url}/v1/audio/speech",
+                json=data,
+                headers=headers
+            )
             response.raise_for_status()
 
             with open(output_file, "wb") as f:
                 f.write(response.content)
 
-            success(f"Audio synthesized successfully and saved to {output_file}")
+            logger.info(f"Audio synthesized successfully and saved to {output_file}")
             return output_file
-        except requests.exceptions.HTTPError as http_err:
-            error(f"HTTP error occurred: {http_err}")
-            error_message = response.json().get('error', 'Unknown error')
-            error(f"Local OpenAI TTS API error: {error_message}")
-            raise
-        except Exception as err:
-            error(f"An error occurred: {err}")
-            raise
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error with Local AI TTS: {str(e)}")
+            return None
+
+    def elevenlabs_tts(self, text, output_file="elevenlabs_tts_output.mp3"):
+        import requests
+        url = "https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM"
+        headers = {
+            "Accept": "audio/mpeg",
+            "Content-Type": "application/json",
+            "xi-api-key": self.elevenlabs_api_key
+        }
+        data = {
+            "text": text,
+            "model_id": "eleven_monolingual_v1",
+            "voice_settings": {
+                "stability": 0.5,
+                "similarity_boost": 0.5
+            }
+        }
+        response = requests.post(url, json=data, headers=headers)
+        if response.status_code == 200:
+            with open(output_file, 'wb') as f:
+                f.write(response.content)
+            return output_file
+        return None
+
+    def coqui_tts(self, text, output_file="coqui_tts_output.wav"):
+        from TTS.api import TTS as CoquiTTS
+        tts = CoquiTTS("tts_models/en/ljspeech/tacotron2-DDC")
+        tts.tts_to_file(text=text, file_path=output_file)
+        return output_file
+
+    def mozilla_tts(self, text, output_file="mozilla_tts_output.wav"):
+        from TTS.api import TTS as MozillaTTS
+        tts = MozillaTTS("tts_models/en/ljspeech/mozilla-tts")
+        tts.tts_to_file(text=text, file_path=output_file)
+        return output_file
+
+    def fairseq_tts(self, text, output_file="fairseq_tts_output.wav"):
+        import torch
+        import soundfile as sf
+        from fairseq.checkpoint_utils import load_model_ensemble_and_task_from_hf_hub
+        from fairseq.models.text_to_speech.hub_interface import TTSHubInterface
+        
+        models, cfg, task = load_model_ensemble_and_task_from_hf_hub(
+            "facebook/fastspeech2-en-ljspeech"
+        )
+        model = models[0]
+        TTSHubInterface.update_cfg_with_data_cfg(cfg, task.data_cfg)
+        generator = task.build_generator([model], cfg)
+        
+        sample = TTSHubInterface.get_model_input(task, text)
+        wav, rate = TTSHubInterface.get_prediction(task, model, generator, sample)
+        sf.write(output_file, wav, rate)
+        return output_file
+
+def main():
+    tts = TTS()
+    options = [
+        "Test Google TTS",
+        "Test Edge TTS",
+        "Test OpenAI TTS",
+        "Test Local AI TTS",
+        "Test Elevenlabs TTS",
+        "Test Coqui TTS",
+        "Test Mozilla TTS",
+        "Test Fairseq TTS",
+        "Exit"
+    ]
+
+    while True:
+        print(colored("\nText-to-Speech Options:", "cyan"))
+        for i, option in enumerate(options, 1):
+            print(f"{i}. {option}")
+
+        choice = input(colored("\nEnter your choice (1-9): ", "yellow"))
+
+        if choice == "9":
+            print(colored("Exiting...", "green"))
+            break
+
+        if choice in ["1", "2", "3", "4", "5", "6", "7", "8"]:
+            text = input(colored(f"\nEnter text for {options[int(choice)-1]}: ", "yellow"))
+            
+            try:
+                if choice == "1":
+                    output_file = tts.google_tts(text)
+                elif choice == "2":
+                    output_file = asyncio.run(tts.edge_tts(text))
+                elif choice == "3":
+                    output_file = tts.openai_tts(text)
+                elif choice == "4":
+                    output_file = tts.local_ai_tts(text)
+                elif choice == "5":
+                    output_file = tts.elevenlabs_tts(text)
+                elif choice == "6":
+                    output_file = tts.coqui_tts(text)
+                elif choice == "7":
+                    output_file = tts.mozilla_tts(text)
+                elif choice == "8":
+                    output_file = tts.fairseq_tts(text)
+
+                if output_file:
+                    print(colored(f"\nAudio generated and saved as {output_file}", "green"))
+                else:
+                    print(colored("Failed to generate audio", "red"))
+            except Exception as e:
+                print(colored(f"Error: {str(e)}", "red"))
+        else:
+            print(colored("Invalid choice. Please try again.", "red"))
+
+if __name__ == "__main__":
+    main()
