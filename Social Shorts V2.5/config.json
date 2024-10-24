@@ -21,7 +21,7 @@
   "outreach_message_subject": "I have a question...",
   "outreach_message_body_file": "outreach_message.html",
   "assembly_ai_api_key": "e9c253a938184370becdf77f2a9e6a45",
-  "redis_uri": "redis://localhost:6379",
+  "redis_uri": "redis-19139.c44.us-east-1-2.ec2.redns.redis-cloud.com:19139",
   "user_data": "C:\\Users\\${user}\\AppData\\Local\\Google\\Chrome\\User Data",
   "font": "bold_font.ttf",
   "imagemagick_path": "/usr/bin/convert",
