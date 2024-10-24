@@ -2,7 +2,7 @@
  import random
  from uuid import uuid4
  from moviepy.editor import ImageClip
- from .MediaGenerator import MediaGenerator
+ from MediaGenerator import MediaGenerator
  from icrawler.builtin import BingImageCrawler
 
 
