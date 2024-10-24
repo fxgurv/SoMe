@@ -3,9 +3,9 @@ import sys
 from status import *
 from cache import get_accounts
 from config import get_verbose
-from classes.Tts import TTS
-from classes.Twitter import Twitter
-from classes.YouTube import YouTube
+from Tts import TTS
+from Twitter import Twitter
+from YouTube import YouTube
 
 def main():
     purpose = str(sys.argv[1])
